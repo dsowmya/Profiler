@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>React Perf Lens</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0f1117;
+      --bg2:       #141826;
+      --bg3:       #1a1f30;
+      --border:    #1e2535;
+      --text:      #dde1ec;
+      --muted:     #6b7280;
+      --accent:    #27ae60;
+      --warn:      #e67e22;
+      --danger:    #e74c3c;
+      --blue:      #3b82f6;
+    }
+
+    html, body {
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font: 12px/1.5 -apple-system, BlinkMacSystemFont, 'Segoe UI', monospace;
+      overflow: hidden;
+    }
+
+    /* ── Layout ── */
+    #app {
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+    }
+
+    /* ── Toolbar ── */
+    #toolbar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 7px 12px;
+      background: var(--bg2);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    #toolbar h1 {
+      font-size: 12px;
+      font-weight: 700;
+      color: #fff;
+      margin-right: 4px;
+    }
+    #toolbar .sep {
+      width: 1px;
+      height: 18px;
+      background: var(--border);
+    }
+    .tb-btn {
+      padding: 4px 10px;
+      border: none;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      background: var(--bg3);
+      color: var(--text);
+      transition: filter 0.15s;
+    }
+    .tb-btn:hover { filter: brightness(1.2); }
+    .tb-btn.primary { background: var(--accent); color: #fff; }
+    .tb-btn.primary.off { background: var(--danger); }
+
+    #tbSearch {
+      margin-left: auto;
+      padding: 4px 8px;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      background: var(--bg3);
+      color: var(--text);
+      font-size: 11px;
+      width: 180px;
+    }
+    #tbSearch:focus { outline: none; border-color: var(--accent); }
+
+    /* ── Stats bar ── */
+    #statsBar {
+      display: flex;
+      gap: 1px;
+      background: var(--border);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .stat-chip {
+      flex: 1;
+      padding: 8px 14px;
+      background: var(--bg);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    .stat-chip .v {
+      font-size: 22px;
+      font-weight: 700;
+      line-height: 1;
+      color: #fff;
+    }
+    .stat-chip .v.warn   { color: var(--warn); }
+    .stat-chip .v.danger { color: var(--danger); }
+    .stat-chip .l {
+      font-size: 9px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: .6px;
+      margin-top: 3px;
+    }
+
+    /* ── Tabs ── */
+    #tabBar {
+      display: flex;
+      border-bottom: 1px solid var(--border);
+      background: var(--bg2);
+      flex-shrink: 0;
+    }
+    .tab {
+      padding: 7px 16px;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--muted);
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      transition: color .15s, border-color .15s;
+      user-select: none;
+    }
+    .tab:hover { color: var(--text); }
+    .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+    .tab .badge {
+      display: inline-block;
+      margin-left: 5px;
+      padding: 0 5px;
+      border-radius: 8px;
+      background: var(--danger);
+      color: #fff;
+      font-size: 9px;
+      font-weight: 700;
+      vertical-align: middle;
+    }
+
+    /* ── Tab panels ── */
+    #panels {
+      flex: 1;
+      overflow: hidden;
+      position: relative;
+    }
+    .panel {
+      position: absolute;
+      inset: 0;
+      overflow: auto;
+      display: none;
+    }
+    .panel.active { display: block; }
+
+    /* ── Table shared ── */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 11px;
+    }
+    thead {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      background: var(--bg2);
+    }
+    th {
+      padding: 6px 12px;
+      text-align: left;
+      color: var(--muted);
+      font-weight: 600;
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: .4px;
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+      cursor: pointer;
+      user-select: none;
+    }
+    th:hover { color: var(--text); }
+    th.sorted { color: var(--accent); }
+    th.sorted::after { content: ' ↓'; }
+    th.sorted.asc::after { content: ' ↑'; }
+
+    td {
+      padding: 5px 12px;
+      border-bottom: 1px solid #12151f;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 260px;
+    }
+    tr:hover td { background: var(--bg2); }
+    tr.highlight td { background: #e74c3c0a; }
+
+    /* ── Severity bar ── */
+    .sev-bar {
+      display: inline-block;
+      height: 8px;
+      border-radius: 2px;
+      vertical-align: middle;
+      margin-right: 6px;
+      min-width: 2px;
+    }
+
+    /* ── Pill ── */
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      padding: 2px 7px;
+      border-radius: 10px;
+      font-size: 10px;
+      font-weight: 700;
+    }
+    .pill.red    { background: #e74c3c22; color: var(--danger); }
+    .pill.orange { background: #e67e2222; color: var(--warn); }
+    .pill.green  { background: #27ae6022; color: var(--accent); }
+    .pill.blue   { background: #3b82f622; color: var(--blue); }
+    .pill.gray   { background: #6b728022; color: var(--muted); }
+
+    /* ── Source link ── */
+    .src { color: var(--muted); font-size: 10px; }
+
+    /* ── Sparkline canvas ── */
+    canvas.spark {
+      vertical-align: middle;
+    }
+
+    /* ── Bundle hotspot bar ── */
+    .size-bar {
+      display: inline-block;
+      height: 10px;
+      border-radius: 2px;
+      background: var(--blue);
+      vertical-align: middle;
+      margin-right: 6px;
+    }
+
+    /* ── Empty state ── */
+    .empty {
+      padding: 60px 20px;
+      text-align: center;
+      color: var(--muted);
+    }
+    .empty .icon { font-size: 36px; margin-bottom: 10px; }
+    .empty p { font-size: 12px; line-height: 1.8; }
+
+    /* ── Scrollbar ── */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  </style>
+</head>
+<body>
+<div id="app">
+
+  <!-- Toolbar -->
+  <div id="toolbar">
+    <h1>⚛ React Perf Lens</h1>
+    <div class="sep"></div>
+    <button class="tb-btn primary" id="btnOverlay">Show Overlay</button>
+    <button class="tb-btn" id="btnClear">Clear</button>
+    <button class="tb-btn" id="btnPause">Pause</button>
+    <div class="sep"></div>
+    <label style="font-size:11px;color:var(--muted)">
+      <input type="checkbox" id="chkOnlyWasted" style="margin-right:4px">
+      Only wasted
+    </label>
+    <input id="tbSearch" type="text" placeholder="Filter components…">
+  </div>
+
+  <!-- Stats bar -->
+  <div id="statsBar">
+    <div class="stat-chip">
+      <span class="v" id="scComponents">0</span>
+      <span class="l">Components</span>
+    </div>
+    <div class="stat-chip">
+      <span class="v" id="scRenders">0</span>
+      <span class="l">Total Renders</span>
+    </div>
+    <div class="stat-chip">
+      <span class="v danger" id="scWasted">0</span>
+      <span class="l">Wasted Renders</span>
+    </div>
+    <div class="stat-chip">
+      <span class="v warn" id="scFreq">–</span>
+      <span class="l">Fastest (r/s)</span>
+    </div>
+    <div class="stat-chip">
+      <span class="v blue" id="scBundleSize">–</span>
+      <span class="l">Largest Bundle</span>
+    </div>
+  </div>
+
+  <!-- Tab bar -->
+  <div id="tabBar">
+    <div class="tab active" data-tab="components">
+      Components <span class="badge" id="badgeComponents" style="display:none"></span>
+    </div>
+    <div class="tab" data-tab="wasted">
+      Wasted Renders <span class="badge" id="badgeWasted" style="display:none"></span>
+    </div>
+    <div class="tab" data-tab="bundles">
+      Bundle Hotspots
+    </div>
+    <div class="tab" data-tab="timeline">
+      Timeline
+    </div>
+  </div>
+
+  <!-- Panels -->
+  <div id="panels">
+
+    <!-- Components tab -->
+    <div class="panel active" id="panelComponents">
+      <table id="tblComponents">
+        <thead>
+          <tr>
+            <th data-col="name">Component</th>
+            <th data-col="renderCount" class="sorted">Renders</th>
+            <th data-col="wastedCount">Wasted</th>
+            <th data-col="wastedPct">Waste %</th>
+            <th data-col="freq">Freq (r/s)</th>
+            <th data-col="severity">Severity</th>
+            <th data-col="source">Source</th>
+          </tr>
+        </thead>
+        <tbody id="tbodyComponents"></tbody>
+      </table>
+      <div class="empty" id="emptyComponents" style="display:none">
+        <div class="icon">⚛</div>
+        <p>No React components tracked yet.<br>Interact with the page to generate renders.</p>
+      </div>
+    </div>
+
+    <!-- Wasted renders tab -->
+    <div class="panel" id="panelWasted">
+      <table id="tblWasted">
+        <thead>
+          <tr>
+            <th data-col="name">Component</th>
+            <th data-col="wastedCount" class="sorted">Wasted Renders</th>
+            <th data-col="wastedPct">Waste %</th>
+            <th data-col="renderCount">Total Renders</th>
+            <th data-col="source">Source</th>
+            <th>Fix Hint</th>
+          </tr>
+        </thead>
+        <tbody id="tbodyWasted"></tbody>
+      </table>
+      <div class="empty" id="emptyWasted" style="display:none">
+        <div class="icon">✅</div>
+        <p>No wasted renders detected.<br>Your components are only re-rendering when their props or state change.</p>
+      </div>
+    </div>
+
+    <!-- Bundles tab -->
+    <div class="panel" id="panelBundles">
+      <table id="tblBundles">
+        <thead>
+          <tr>
+            <th data-col="name">Script</th>
+            <th data-col="size" class="sorted">Size</th>
+            <th data-col="duration">Load Time</th>
+            <th>Hotspot</th>
+          </tr>
+        </thead>
+        <tbody id="tbodyBundles"></tbody>
+      </table>
+      <div class="empty" id="emptyBundles" style="display:none">
+        <div class="icon">📦</div>
+        <p>No script resources captured yet.<br>Bundle data is collected as React renders occur.</p>
+      </div>
+    </div>
+
+    <!-- Timeline tab -->
+    <div class="panel" id="panelTimeline">
+      <canvas id="timelineCanvas" style="display:block;width:100%;"></canvas>
+      <div class="empty" id="emptyTimeline" style="display:none">
+        <div class="icon">📈</div>
+        <p>Timeline will populate as renders occur.</p>
+      </div>
+    </div>
+
+  </div><!-- /panels -->
+</div><!-- /app -->
+
+<script src="panel.js"></script>
+</body>
+</html>

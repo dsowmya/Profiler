@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>React Perf Lens</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      width: 340px;
+      font: 13px/1.4 -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #0f1117;
+      color: #e0e0e0;
+    }
+
+    /* ── Header ── */
+    header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 14px 8px;
+      border-bottom: 1px solid #1e2130;
+    }
+    header .logo { font-size: 18px; }
+    header h1 { font-size: 13px; font-weight: 700; color: #fff; flex: 1; }
+    header .version { font-size: 10px; color: #555; }
+
+    /* ── Controls ── */
+    .controls {
+      display: flex;
+      gap: 8px;
+      padding: 10px 14px;
+      border-bottom: 1px solid #1e2130;
+    }
+    button {
+      flex: 1;
+      padding: 6px 10px;
+      border: none;
+      border-radius: 5px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: filter 0.15s;
+    }
+    button:hover { filter: brightness(1.15); }
+    #btnToggle {
+      background: #27ae60;
+      color: #fff;
+    }
+    #btnToggle.active {
+      background: #e74c3c;
+    }
+    #btnClear {
+      background: #2c3047;
+      color: #aaa;
+    }
+    #btnOpen {
+      background: #2c3047;
+      color: #aaa;
+    }
+
+    /* ── No-React state ── */
+    #noReact {
+      padding: 24px 14px;
+      text-align: center;
+      color: #555;
+      font-size: 12px;
+    }
+    #noReact .icon { font-size: 28px; margin-bottom: 6px; }
+
+    /* ── Stats row ── */
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1px;
+      background: #1e2130;
+      border-bottom: 1px solid #1e2130;
+    }
+    .stat {
+      background: #0f1117;
+      padding: 10px 8px;
+      text-align: center;
+    }
+    .stat .val {
+      display: block;
+      font-size: 20px;
+      font-weight: 700;
+      color: #fff;
+      line-height: 1;
+    }
+    .stat .val.warn  { color: #e74c3c; }
+    .stat .val.caution { color: #e67e22; }
+    .stat .lbl {
+      display: block;
+      font-size: 9px;
+      color: #666;
+      text-transform: uppercase;
+      letter-spacing: .5px;
+      margin-top: 3px;
+    }
+
+    /* ── Table ── */
+    .section-title {
+      padding: 8px 14px 4px;
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .5px;
+      color: #555;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 11px;
+    }
+    th {
+      padding: 4px 14px;
+      text-align: left;
+      color: #555;
+      font-weight: 600;
+      font-size: 10px;
+      background: #0b0e18;
+      border-bottom: 1px solid #1e2130;
+    }
+    td {
+      padding: 5px 14px;
+      border-bottom: 1px solid #12151f;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 180px;
+    }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: #141826; }
+
+    .pill {
+      display: inline-block;
+      padding: 1px 5px;
+      border-radius: 10px;
+      font-size: 10px;
+      font-weight: 700;
+    }
+    .pill.red    { background: #e74c3c22; color: #e74c3c; }
+    .pill.orange { background: #e67e2222; color: #e67e22; }
+    .pill.green  { background: #27ae6022; color: #27ae60; }
+
+    .wasted-tag {
+      font-size: 9px;
+      color: #e74c3c;
+      margin-left: 4px;
+    }
+
+    /* ── Footer ── */
+    footer {
+      padding: 8px 14px;
+      font-size: 10px;
+      color: #444;
+      border-top: 1px solid #1e2130;
+      display: flex;
+      justify-content: space-between;
+    }
+    footer a {
+      color: #27ae60;
+      text-decoration: none;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <span class="logo">⚛</span>
+    <h1>React Perf Lens</h1>
+    <span class="version">v1.0</span>
+  </header>
+
+  <div class="controls">
+    <button id="btnToggle">Show Overlay</button>
+    <button id="btnClear">Clear</button>
+    <button id="btnOpen">DevTools ↗</button>
+  </div>
+
+  <div id="noReact" style="display:none">
+    <div class="icon">🔍</div>
+    <div>No React detected on this page.<br>Interact with a React app to start profiling.</div>
+  </div>
+
+  <div id="appContent">
+    <div class="stats">
+      <div class="stat">
+        <span class="val" id="statComponents">–</span>
+        <span class="lbl">Components</span>
+      </div>
+      <div class="stat">
+        <span class="val" id="statRenders">–</span>
+        <span class="lbl">Total Renders</span>
+      </div>
+      <div class="stat">
+        <span class="val" id="statWasted">–</span>
+        <span class="lbl">Wasted</span>
+      </div>
+    </div>
+
+    <div class="section-title">Top Components by Render Count</div>
+    <table>
+      <thead>
+        <tr>
+          <th>Component</th>
+          <th>Renders</th>
+          <th>Wasted</th>
+        </tr>
+      </thead>
+      <tbody id="componentTable"></tbody>
+    </table>
+  </div>
+
+  <footer>
+    <span>Open DevTools panel for full analysis</span>
+    <span id="footerStatus">Monitoring…</span>
+  </footer>
+
+  <script src="popup.js"></script>
+</body>
+</html>
