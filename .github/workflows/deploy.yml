@@ -1,0 +1,76 @@
+﻿name: Deploy
+
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  build-and-deploy:
+    name: Build & Upload to S3
+    runs-on: ubuntu-latest
+
+    env:
+      EXTENSION_DIR: react-perf-lens
+      ZIP_NAME: react-perf-lens-${{ github.sha }}.zip
+      LATEST_ZIP_NAME: react-perf-lens-latest.zip
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # -- Build -------------------------------------------------------------
+      - name: Install dependencies
+        working-directory: ${{ env.EXTENSION_DIR }}
+        run: |
+          if [ -f package.json ]; then
+            npm ci
+          fi
+
+      - name: Package extension
+        run: |
+          cd ${{ env.EXTENSION_DIR }}
+          zip -r "../${{ env.ZIP_NAME }}" . \
+            --exclude "*.git*" \
+            --exclude "node_modules/*" \
+            --exclude "*.md" \
+            --exclude "package-lock.json"
+          cp "../${{ env.ZIP_NAME }}" "../${{ env.LATEST_ZIP_NAME }}"
+
+      # -- AWS S3 ------------------------------------------------------------
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Upload versioned zip to S3
+        run: |
+          aws s3 cp "${{ env.ZIP_NAME }}" \
+            "s3://${{ secrets.S3_BUCKET }}/releases/${{ env.ZIP_NAME }}" \
+            --cache-control "public, max-age=31536000, immutable"
+
+      - name: Upload latest zip to S3
+        run: |
+          aws s3 cp "${{ env.LATEST_ZIP_NAME }}" \
+            "s3://${{ secrets.S3_BUCKET }}/releases/${{ env.LATEST_ZIP_NAME }}" \
+            --cache-control "public, max-age=300"
+
+      - name: Sync static files to S3
+        run: |
+          aws s3 sync "${{ env.EXTENSION_DIR }}/" \
+            "s3://${{ secrets.S3_BUCKET }}/dist/" \
+            --exclude "node_modules/*" \
+            --exclude "*.md" \
+            --exclude "package-lock.json" \
+            --delete \
+            --cache-control "public, max-age=300"
+
+      # -- Summary -----------------------------------------------------------
+      - name: Print deployment summary
+        run: |
+          echo "### Deployment complete" >> $GITHUB_STEP_SUMMARY
+          echo "- **Commit:** \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **S3 bucket:** \`${{ secrets.S3_BUCKET }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Versioned zip:** \`releases/${{ env.ZIP_NAME }}\`" >> $GITHUB_STEP_SUMMARY
