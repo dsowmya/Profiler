@@ -16,7 +16,7 @@ No code changes. No build config. Just install and profile.
 
 ### DevTools Panel — Full Component Breakdown
 
-![DevTools Panel](./docs/screenshots/devtools-panel.png)
+![DevTools Panel](./docs/screenshots/devtools_panel.png)
 
 The full DevTools panel gives you a sortable table of every tracked component. At a glance you see total renders, wasted renders, waste percentage, render frequency, and a severity score — so you can prioritize fixes instead of guessing.
 
