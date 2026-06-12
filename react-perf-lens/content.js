@@ -37,10 +37,20 @@
   }
 
   // ─── Web Worker bootstrap ──────────────────────────────────────────────
-  function startWorker() {
-    worker = new Worker(chrome.runtime.getURL('worker.js'));
-    worker.onmessage = onWorkerMessage;
-    worker.onerror   = e => console.warn('[RPL] worker error', e);
+  async function startWorker() {
+    // new Worker(chrome-extension://...) is blocked by Chrome's origin check
+    // when called from a content script. Fetch the script and construct via
+    // a blob:// URL instead — blob URLs have no origin so they're always allowed.
+    try {
+      const resp = await fetch(chrome.runtime.getURL('worker.js'));
+      const blob = await resp.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      worker = new Worker(blobUrl);
+      worker.onmessage = onWorkerMessage;
+      worker.onerror   = e => console.warn('[RPL] worker error', e);
+    } catch (e) {
+      console.warn('[RPL] failed to start worker:', e);
+    }
   }
 
   function onWorkerMessage({ data }) {
